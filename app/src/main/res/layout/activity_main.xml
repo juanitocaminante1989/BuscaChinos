@@ -17,7 +17,8 @@
         android:layout_alignParentBottom="true"
         android:layout_alignParentStart="true"
         android:gravity="center"
-        android:weightSum="1">
+        android:weightSum="1"
+        android:id="@+id/linearLayout">
 
         <Button
             android:id="@+id/tag_button"
@@ -33,4 +34,14 @@
 
     </LinearLayout>
 
+
+
+    <Button
+        android:id="@+id/delete_marker"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_above="@+id/linearLayout"
+        android:layout_alignParentStart="true"
+        android:layout_marginStart="295dp"
+        android:text="Borrar chino" />
 </RelativeLayout>
