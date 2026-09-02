@@ -19,7 +19,6 @@ import androidx.core.app.ActivityCompat
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.MapView
-import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.Marker
@@ -36,10 +35,6 @@ class MainActivity : AppCompatActivity() {
     private var buscaChinosSqlHelper: BuscaChinosSqlHelper? = null
     private var controller: Controller? = null
     private var myMarker: Marker? = null
-
-    /** Punto elegido con un long press en el mapa donde se tagueará el próximo chino. */
-    private var selectedLatLng: LatLng? = null
-    private var selectionMarker: Marker? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -111,25 +106,10 @@ class MainActivity : AppCompatActivity() {
                 false
             }
 
-            // Long press: marca el punto exacto donde se tagueará el próximo chino
+            // Long press: taguea el chino directamente en ese punto exacto,
+            // igual que el botón "Taguea el chino"
             mMap.setOnMapLongClickListener { latLng ->
-                selectedLatLng = latLng
-                selectionMarker?.remove()
-                selectionMarker = mMap.addMarker(
-                    MarkerOptions()
-                        .position(latLng)
-                        .title("Punto seleccionado")
-                        .icon(
-                            BitmapDescriptorFactory.defaultMarker(
-                                BitmapDescriptorFactory.HUE_AZURE
-                            )
-                        )
-                )
-                Toast.makeText(
-                    this,
-                    "Punto marcado. Pulsa \"Taguea el chino\" para taguearlo aquí.",
-                    Toast.LENGTH_SHORT
-                ).show()
+                tagChino(latLng)
             }
         }
     }
@@ -228,27 +208,26 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun setTag() {
+        // El botón taguea en la ubicación actual del GPS
+        val target = LatLng(gpsTracker!!.getLatitude(), gpsTracker!!.getLongitude())
+        tagChino(target)
+    }
+
+    /** Taguea un chino en [target]: añade el marcador y lo inserta en la BBDD. */
+    private fun tagChino(target: LatLng) {
         val map = googleMap ?: return
         val db = Constants.database ?: return
-        // Si el usuario marcó un punto con un long press, se taguea ahí;
-        // si no, se usa la ubicación actual del GPS.
-        val target = selectedLatLng
-            ?: LatLng(gpsTracker!!.getLatitude(), gpsTracker!!.getLongitude())
-        map.addMarker(addMarketOptions(target, tageName!!.text.toString(), ""))
+        val name = tageName!!.text.toString()
+        map.addMarker(addMarketOptions(target, name, ""))
         val cant = controller!!.getCantidadCategorias() + 1
         val initialValues = ContentValues().apply {
             put("codChino", cant)
-            put("chino_name", tageName!!.text.toString())
+            put("chino_name", name)
             put("longitud", target.longitude)
             put("latitud", target.latitude)
         }
         db.insert("chino", "codChino=?", initialValues)
         tageName!!.setText("")
-
-        // Se limpia el punto seleccionado tras taguearlo
-        selectionMarker?.remove()
-        selectionMarker = null
-        selectedLatLng = null
     }
 
     fun deleteMarker() {
