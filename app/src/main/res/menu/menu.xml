@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<menu xmlns:BuscaChinos="http://schemas.android.com/apk/res-auto"
-    xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:id="@+id/search"
-        android:title="@string/search_title"
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/search"
         android:icon="@android:drawable/ic_menu_search"
-        BuscaChinos:showAsAction="ifRoom"
-        BuscaChinos:actionViewClass="android.widget.SearchView" />
+        android:title="@string/search_title"
+        app:actionViewClass="androidx.appcompat.widget.SearchView"
+        app:showAsAction="ifRoom" />
 </menu>
