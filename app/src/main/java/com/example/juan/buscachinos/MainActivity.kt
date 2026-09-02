@@ -16,7 +16,6 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SearchView
 import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.MapView
@@ -56,7 +55,6 @@ class MainActivity : AppCompatActivity() {
         buscaChinosSqlHelper = BuscaChinosSqlHelper(this, "chinoBBDD", null, 1)
         Constants.database = buscaChinosSqlHelper!!.writableDatabase
         controller = Controller()
-        mMapView!!.onResume()
 
         try {
             if (ActivityCompat.shouldShowRequestPermissionRationale(
@@ -73,67 +71,102 @@ class MainActivity : AppCompatActivity() {
             } else {
                 requestPermission(Manifest.permission.ACCESS_FINE_LOCATION, 1)
             }
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.ACCESS_FINE_LOCATION
-                ) == PackageManager.PERMISSION_GRANTED
-            ) {
-                mMapView!!.getMapAsync { mMap ->
-                    googleMap = mMap
-
-                    // For showing a move to my location button
-                    if (ActivityCompat.checkSelfPermission(
-                            this,
-                            Manifest.permission.ACCESS_FINE_LOCATION
-                        ) == PackageManager.PERMISSION_GRANTED
-                    ) {
-                        mMap.isMyLocationEnabled = true
-                    }
-
-                    // For dropping a marker at a point on the Map
-                    val sydney = LatLng(gpsTracker!!.getLatitude(), gpsTracker!!.getLongitude())
-                    for (chino in controller!!.getChinos()) {
-                        val coords = LatLng(chino.latitude, chino.longitud)
-                        mMap.addMarker(addMarketOptions(coords, chino.chino_name, ""))
-                    }
-
-                    // For zooming automatically to the location of the marker
-                    val cameraPosition = CameraPosition.Builder().target(sydney).zoom(12f).build()
-                    mMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition))
-
-                    mMap.setOnMarkerClickListener { marker ->
-                        myMarker = marker
-                        false
-                    }
-
-                    // Long press: marca el punto exacto donde se tagueará el próximo chino
-                    mMap.setOnMapLongClickListener { latLng ->
-                        selectedLatLng = latLng
-                        selectionMarker?.remove()
-                        selectionMarker = mMap.addMarker(
-                            MarkerOptions()
-                                .position(latLng)
-                                .title("Punto seleccionado")
-                                .icon(
-                                    BitmapDescriptorFactory.defaultMarker(
-                                        BitmapDescriptorFactory.HUE_AZURE
-                                    )
-                                )
-                        )
-                        Toast.makeText(
-                            this,
-                            "Punto marcado. Pulsa \"Taguea el chino\" para taguearlo aquí.",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }
-            }
+            setupMap()
         } catch (e: Exception) {
             DebugUtilities.writeLog("", e)
         }
 
         tagButton!!.setOnClickListener { setTag() }
         deleteButton!!.setOnClickListener { deleteMarker() }
+    }
+
+    private fun setupMap() {
+        val mapView = mMapView ?: return
+        mapView.getMapAsync { mMap ->
+            googleMap = mMap
+
+            // For showing a move to my location button
+            if (ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
+                mMap.isMyLocationEnabled = true
+            }
+
+            // For dropping a marker at a point on the Map
+            val sydney = LatLng(gpsTracker!!.getLatitude(), gpsTracker!!.getLongitude())
+            mMap.clear()
+            for (chino in controller!!.getChinos()) {
+                val coords = LatLng(chino.latitude, chino.longitud)
+                mMap.addMarker(addMarketOptions(coords, chino.chino_name, ""))
+            }
+
+            // For zooming automatically to the location of the marker
+            val cameraPosition = CameraPosition.Builder().target(sydney).zoom(12f).build()
+            mMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition))
+
+            mMap.setOnMarkerClickListener { marker ->
+                myMarker = marker
+                false
+            }
+
+            // Long press: marca el punto exacto donde se tagueará el próximo chino
+            mMap.setOnMapLongClickListener { latLng ->
+                selectedLatLng = latLng
+                selectionMarker?.remove()
+                selectionMarker = mMap.addMarker(
+                    MarkerOptions()
+                        .position(latLng)
+                        .title("Punto seleccionado")
+                        .icon(
+                            BitmapDescriptorFactory.defaultMarker(
+                                BitmapDescriptorFactory.HUE_AZURE
+                            )
+                        )
+                )
+                Toast.makeText(
+                    this,
+                    "Punto marcado. Pulsa \"Taguea el chino\" para taguearlo aquí.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        mMapView?.onStart()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        mMapView?.onResume()
+    }
+
+    override fun onPause() {
+        mMapView?.onPause()
+        super.onPause()
+    }
+
+    override fun onStop() {
+        mMapView?.onStop()
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        mMapView?.onDestroy()
+        super.onDestroy()
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        mMapView?.onLowMemory()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        mMapView?.onSaveInstanceState(outState)
     }
 
     fun addMarketOptions(place: LatLng, title: String?, snippet: String?): MarkerOptions {
@@ -152,6 +185,9 @@ class MainActivity : AppCompatActivity() {
                     grantResults[0] == PackageManager.PERMISSION_GRANTED
                 val msg = if (granted) "Permission Granted!" else "Permission Denied!"
                 Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+                if (granted) {
+                    setupMap()
+                }
             }
         }
     }
