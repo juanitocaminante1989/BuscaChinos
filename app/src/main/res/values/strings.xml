@@ -3,4 +3,9 @@
     <string name="search_title">BuscaChinos</string>
     <string name="search_hint">Introduce titulo</string>
 
+    <string name="drawer_open">Abrir menu</string>
+    <string name="drawer_close">Cerrar menu</string>
+    <string name="drawer_menu_listado">Listado</string>
+    <string name="empty_chino_list">No hay chinos tagueados todavia</string>
+
 </resources>

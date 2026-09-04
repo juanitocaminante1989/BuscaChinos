@@ -3,6 +3,7 @@ package com.example.juan.buscachinos.presentation.map
 import android.Manifest
 import android.app.SearchManager
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
@@ -11,15 +12,19 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SearchView
 import androidx.core.app.ActivityCompat
 import androidx.core.graphics.Insets
+import androidx.core.view.GravityCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import androidx.drawerlayout.widget.DrawerLayout
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -35,6 +40,7 @@ import com.google.android.gms.maps.MapView
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
+import com.google.android.material.navigation.NavigationView
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -43,12 +49,14 @@ import kotlinx.coroutines.launch
  * View de MVVM: solo se ocupa de Android Views/MapView/permisos/edge-to-edge.
  * Toda la logica de negocio vive en [MapViewModel].
  */
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), TagListBottomSheet.Listener {
     private var mMapView: MapView? = null
     private var googleMap: GoogleMap? = null
     private var deleteButton: Button? = null
     private var buttonBar: View? = null
     private var systemBarInsets: Insets? = null
+    private var drawerLayout: DrawerLayout? = null
+    private var drawerToggle: ActionBarDrawerToggle? = null
 
     private val viewModel: MapViewModel by lazy {
         val container = (application as BuscaChinosApplication).container
@@ -65,6 +73,7 @@ class MainActivity : AppCompatActivity() {
         deleteButton = findViewById(R.id.delete_marker)
         buttonBar = findViewById(R.id.linearLayout)
         setupEdgeToEdge()
+        setupDrawer()
         observeUiState()
 
         try {
@@ -156,6 +165,60 @@ class MainActivity : AppCompatActivity() {
             val insets = systemBarInsets ?: return@post
             map.setPadding(insets.left, insets.top, insets.right, bar.height)
         }
+    }
+
+    /** Drawer con el menu lateral (por ahora solo "Listado"). */
+    private fun setupDrawer() {
+        val drawer = findViewById<DrawerLayout>(R.id.drawer_layout)
+        drawerLayout = drawer
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        supportActionBar?.setHomeButtonEnabled(true)
+        val toggle = ActionBarDrawerToggle(
+            this, drawer, R.string.drawer_open, R.string.drawer_close
+        )
+        drawer.addDrawerListener(toggle)
+        toggle.syncState()
+        drawerToggle = toggle
+
+        findViewById<NavigationView>(R.id.nav_view).setNavigationItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_listado -> {
+                    TagListBottomSheet().show(supportFragmentManager, TagListBottomSheet.TAG)
+                    drawer.closeDrawer(GravityCompat.START)
+                    true
+                }
+                else -> false
+            }
+        }
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (drawer.isDrawerOpen(GravityCompat.START)) {
+                    drawer.closeDrawer(GravityCompat.START)
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                    isEnabled = true
+                }
+            }
+        })
+    }
+
+    override fun onChinoSelected(chino: Chino) {
+        val target = chino.location
+        googleMap?.animateCamera(
+            CameraUpdateFactory.newLatLngZoom(LatLng(target.latitude, target.longitude), 17f)
+        )
+    }
+
+    override fun onPostCreate(savedInstanceState: Bundle?) {
+        super.onPostCreate(savedInstanceState)
+        drawerToggle?.syncState()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        drawerToggle?.onConfigurationChanged(newConfig)
     }
 
     private fun setupMap() {
@@ -304,6 +367,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (drawerToggle?.onOptionsItemSelected(item) == true) return true
         return super.onOptionsItemSelected(item)
     }
 

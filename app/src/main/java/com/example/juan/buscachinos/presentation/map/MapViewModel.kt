@@ -36,9 +36,9 @@ class MapViewModel(
     init {
         viewModelScope.launch {
             combine(observeChinosUseCase(), searchQuery) { chinos, query ->
-                searchChinosUseCase(chinos, query)
-            }.collect { visibleChinos ->
-                _uiState.update { it.copy(chinos = visibleChinos) }
+                chinos to searchChinosUseCase(chinos, query)
+            }.collect { (allChinos, visibleChinos) ->
+                _uiState.update { it.copy(chinos = visibleChinos, allChinos = allChinos) }
             }
         }
     }
