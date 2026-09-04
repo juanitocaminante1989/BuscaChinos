@@ -1,4 +1,4 @@
-package com.example.juan.buscachinos
+package com.example.juan.buscachinos.core
 
 import android.util.Log
 

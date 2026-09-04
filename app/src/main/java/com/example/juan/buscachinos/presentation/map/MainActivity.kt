@@ -1,17 +1,15 @@
-package com.example.juan.buscachinos
+package com.example.juan.buscachinos.presentation.map
 
 import android.Manifest
 import android.app.SearchManager
-import android.content.ContentValues
-import android.content.DialogInterface
 import android.content.pm.PackageManager
-import android.location.LocationManager
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -22,25 +20,38 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import com.example.juan.buscachinos.BuscaChinosApplication
+import com.example.juan.buscachinos.R
+import com.example.juan.buscachinos.core.DebugUtilities
+import com.example.juan.buscachinos.domain.model.Chino
+import com.example.juan.buscachinos.domain.model.GeoPoint
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.MapView
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
+import kotlinx.coroutines.launch
 
+/**
+ * View de MVVM: solo se ocupa de Android Views/MapView/permisos/edge-to-edge.
+ * Toda la logica de negocio vive en [MapViewModel].
+ */
 class MainActivity : AppCompatActivity() {
     private var mMapView: MapView? = null
     private var googleMap: GoogleMap? = null
     private var deleteButton: Button? = null
     private var buttonBar: View? = null
     private var systemBarInsets: Insets? = null
-    private var gpsTracker: GPSTracker? = null
-    private var locationManager: LocationManager? = null
-    private var buscaChinosSqlHelper: BuscaChinosSqlHelper? = null
-    private var controller: Controller? = null
-    private var myMarker: Marker? = null
+
+    private val viewModel: MapViewModel by lazy {
+        val container = (application as BuscaChinosApplication).container
+        ViewModelProvider(this, MapViewModelFactory(container))[MapViewModel::class.java]
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,11 +63,7 @@ class MainActivity : AppCompatActivity() {
         deleteButton = findViewById(R.id.delete_marker)
         buttonBar = findViewById(R.id.linearLayout)
         setupEdgeToEdge()
-        locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
-        gpsTracker = GPSTracker(this, locationManager)
-        buscaChinosSqlHelper = BuscaChinosSqlHelper(this, "chinoBBDD", null, 1)
-        Constants.database = buscaChinosSqlHelper!!.writableDatabase
-        controller = Controller()
+        observeUiState()
 
         try {
             if (ActivityCompat.shouldShowRequestPermissionRationale(
@@ -78,7 +85,30 @@ class MainActivity : AppCompatActivity() {
             DebugUtilities.writeLog("", e)
         }
 
-        deleteButton!!.setOnClickListener { deleteMarker() }
+        deleteButton!!.setOnClickListener { viewModel.deleteSelectedChino() }
+    }
+
+    private fun observeUiState() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.uiState.collect { state ->
+                    renderMarkers(state.chinos)
+                    deleteButton?.visibility =
+                        if (state.selectedChinoId != null) View.VISIBLE else View.GONE
+                }
+            }
+        }
+    }
+
+    /** Vuelve a pintar todos los markers a partir del estado actual (fuente de verdad: Room). */
+    private fun renderMarkers(chinos: List<Chino>) {
+        val map = googleMap ?: return
+        map.clear()
+        for (chino in chinos) {
+            val position = LatLng(chino.location.latitude, chino.location.longitude)
+            val marker = map.addMarker(addMarketOptions(position, chino.name, ""))
+            marker?.tag = chino.id
+        }
     }
 
     /**
@@ -122,6 +152,7 @@ class MainActivity : AppCompatActivity() {
         mapView.getMapAsync { mMap ->
             googleMap = mMap
             applyMapPadding()
+            renderMarkers(viewModel.uiState.value.chinos)
 
             // For showing a move to my location button
             if (ActivityCompat.checkSelfPermission(
@@ -132,30 +163,26 @@ class MainActivity : AppCompatActivity() {
                 mMap.isMyLocationEnabled = true
             }
 
-            // For dropping a marker at a point on the Map
-            val sydney = LatLng(gpsTracker!!.getLatitude(), gpsTracker!!.getLongitude())
-            mMap.clear()
-            for (chino in controller!!.getChinos()) {
-                val coords = LatLng(chino.latitude, chino.longitud)
-                mMap.addMarker(addMarketOptions(coords, chino.chino_name, ""))
-            }
-
             // For zooming automatically to the location of the marker
-            val cameraPosition = CameraPosition.Builder().target(sydney).zoom(12f).build()
+            val target = viewModel.uiState.value.initialCameraTarget
+            val cameraPosition = CameraPosition.Builder()
+                .target(LatLng(target.latitude, target.longitude))
+                .zoom(12f)
+                .build()
             mMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition))
 
             mMap.setOnMarkerClickListener { marker ->
-                myMarker = marker
-                deleteButton!!.visibility = View.VISIBLE
+                (marker.tag as? Long)?.let { viewModel.selectChino(it) }
                 false
             }
 
-            mMap.setOnMapClickListener{ map ->
-                deleteButton!!.visibility = View.GONE
+            mMap.setOnMapClickListener {
+                viewModel.clearSelection()
             }
+
             // Long press: pide el nombre del chino y lo taguea en ese punto exacto
             mMap.setOnMapLongClickListener { latLng ->
-                showTagDialog(latLng)
+                showTagDialog(GeoPoint(latitude = latLng.latitude, longitude = latLng.longitude))
             }
         }
     }
@@ -254,12 +281,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Muestra un EditText con botón "Taguear" para nombrar el chino en [target]. */
-    private fun showTagDialog(target: LatLng) {
+    private fun showTagDialog(target: GeoPoint) {
         val input = EditText(this).apply {
             hint = "Nombre del chino"
         }
         val padding = (16 * resources.displayMetrics.density).toInt()
-        val container = android.widget.FrameLayout(this).apply {
+        val container = FrameLayout(this).apply {
             setPadding(padding, padding, padding, padding)
             addView(input)
         }
@@ -267,41 +294,9 @@ class MainActivity : AppCompatActivity() {
             .setTitle("Taguear chino")
             .setView(container)
             .setPositiveButton("Taguear") { _, _ ->
-                tagChino(target, input.text.toString())
+                viewModel.tagChino(target, input.text.toString())
             }
             .setNegativeButton("Cancelar", null)
             .show()
-    }
-
-    /** Taguea un chino en [target] con nombre [name]: añade el marcador y lo inserta en la BBDD. */
-    private fun tagChino(target: LatLng, name: String) {
-        val map = googleMap ?: return
-        val db = Constants.database ?: return
-        map.addMarker(addMarketOptions(target, name, ""))
-        val cant = controller!!.getCantidadCategorias() + 1
-        val initialValues = ContentValues().apply {
-            put("codChino", cant)
-            put("chino_name", name)
-            put("longitud", target.longitude)
-            put("latitud", target.latitude)
-        }
-        db.insert("chino", "codChino=?", initialValues)
-    }
-
-    fun deleteMarker() {
-        val marker = myMarker ?: return
-        val db = Constants.database ?: return
-        val chino = controller!!.getChinobyCoords(
-            marker.position.longitude,
-            marker.position.latitude
-        )
-        try {
-            if (chino != null) {
-                db.delete("chino", "codChino=?", arrayOf(chino.codChino.toString()))
-                marker.isVisible = false
-            }
-        } catch (e: Exception) {
-            DebugUtilities.writeLog("", e)
-        }
     }
 }
