@@ -14,6 +14,7 @@ class MapViewModelFactory(private val container: AppContainer) : ViewModelProvid
             observeChinosUseCase = container.observeChinosUseCase,
             addChinoUseCase = container.addChinoUseCase,
             deleteChinoUseCase = container.deleteChinoUseCase,
+            searchChinosUseCase = container.searchChinosUseCase,
             getLastKnownLocationUseCase = container.getLastKnownLocationUseCase
         ) as T
     }

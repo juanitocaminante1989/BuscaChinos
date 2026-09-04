@@ -12,6 +12,7 @@ import com.example.juan.buscachinos.domain.usecase.AddChinoUseCase
 import com.example.juan.buscachinos.domain.usecase.DeleteChinoUseCase
 import com.example.juan.buscachinos.domain.usecase.GetLastKnownLocationUseCase
 import com.example.juan.buscachinos.domain.usecase.ObserveChinosUseCase
+import com.example.juan.buscachinos.domain.usecase.SearchChinosUseCase
 
 /**
  * Contenedor de dependencias manual (sin framework de DI). Cablea `data` -> `domain`
@@ -31,6 +32,7 @@ class AppContainer(context: Context) {
     val addChinoUseCase = AddChinoUseCase(chinoRepository)
     val deleteChinoUseCase = DeleteChinoUseCase(chinoRepository)
     val getLastKnownLocationUseCase = GetLastKnownLocationUseCase(locationRepository)
+    val searchChinosUseCase = SearchChinosUseCase()
 }
 
 class BuscaChinosApplication : Application() {

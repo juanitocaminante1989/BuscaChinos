@@ -35,6 +35,8 @@ import com.google.android.gms.maps.MapView
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -91,10 +93,19 @@ class MainActivity : AppCompatActivity() {
     private fun observeUiState() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.uiState.collect { state ->
-                    renderMarkers(state.chinos)
-                    deleteButton?.visibility =
-                        if (state.selectedChinoId != null) View.VISIBLE else View.GONE
+                // Separado del estado de seleccion: si repintaramos los markers en cada
+                // emision (incluida la del propio tap que selecciona uno), map.clear()
+                // destruiria el marker recien tocado y su info window desaparecia al toque.
+                launch {
+                    viewModel.uiState.map { it.chinos }.distinctUntilChanged()
+                        .collect { chinos -> renderMarkers(chinos) }
+                }
+                launch {
+                    viewModel.uiState.map { it.selectedChinoId }.distinctUntilChanged()
+                        .collect { selectedChinoId ->
+                            deleteButton?.visibility =
+                                if (selectedChinoId != null) View.VISIBLE else View.GONE
+                        }
                 }
             }
         }
@@ -273,6 +284,22 @@ class MainActivity : AppCompatActivity() {
         val searchManager = getSystemService(SEARCH_SERVICE) as SearchManager
         val searchView = menu.findItem(R.id.search).actionView as? SearchView
         searchView?.setSearchableInfo(searchManager.getSearchableInfo(componentName))
+        searchView?.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+            override fun onQueryTextSubmit(query: String?): Boolean {
+                viewModel.search(query.orEmpty())
+                searchView.clearFocus()
+                return true
+            }
+
+            override fun onQueryTextChange(newText: String?): Boolean {
+                // Si se borra/limpia el texto, se restablecen todos los tags sin
+                // esperar a que se pulse de nuevo la accion de buscar.
+                if (newText.isNullOrEmpty()) {
+                    viewModel.search("")
+                }
+                return false
+            }
+        })
         return true
     }
 
